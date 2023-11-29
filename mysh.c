@@ -40,8 +40,7 @@ char** insertArguments(char** token, int* len1, char** arguments, int len2) {
     
     int temp = 0;
 
-    for (int x = 0; x < newSize; x++){ // populates the new array 
-        //printf("\n\n%d\n\n", x);
+    for (int x = 0; x < newSize; x++){ // populates the new array
         if (x == index){
             for (int i = 0; i < len2; i++){ // inserts the elements from arguments when the index of the element with the wildcard is hit
                 newCommand[x] = strdup(arguments[i]);
@@ -127,18 +126,20 @@ char** wildcard_expansion(char* command, int* numOfElements)
     
     if (wildcard != NULL){ // finds the characters after the * but before the next space
         char* spaceAfter = strchr(wildcard, ' ');
-        if (spaceAfter != NULL){
+        if (spaceAfter != NULL){ // if there is a space after the * populate after with the substring
             size_t lenA = spaceAfter - (wildcard +1);
             after = (char*)malloc(lenA+1);
 
-            if (after != NULL){
+            if (after != NULL){ // populates after with the substring after the *
                 for (size_t i =0; i<lenA; i++){
                     after[i] = wildcard[i+1];
                 }
 
                 after[lenA] = '\0';
+            }else{
+                return NULL;
             }
-        } else{
+        } else{ // if no substring after the * set after to be empty
             after = strdup(wildcard+1);
             if (after == NULL){
                 after = "";
@@ -186,9 +187,14 @@ char** wildcard_expansion(char* command, int* numOfElements)
         tempstr++;
     }
 
-    //printf("%s\n\n",slash+1);
+    
+    char* slicedBefore;
+    if (strlen(slash) == 0){ // if no slash found there is no need to manipulate the string before 
+        slicedBefore = before;
+    }else{
+        slicedBefore= slash+1; //before without the directory path
+    }
 
-    char* slicedBefore= slash+1; //before without the directory path
 
     char* search_dir = ".";
 
@@ -200,7 +206,7 @@ char** wildcard_expansion(char* command, int* numOfElements)
     }
 
     //printf("%s",slash);
-    printf("\n- %s\n\n", search_dir);
+    //printf("\n- %s\n\n", search_dir);
 
     DIR *dir;
     struct dirent *entry;
@@ -208,7 +214,7 @@ char** wildcard_expansion(char* command, int* numOfElements)
 
     dir = opendir(search_dir);
 
-    if (dir == NULL){
+    if (dir == NULL){ // error if dir fails to open
         write(STDOUT_FILENO, "ERROR failed to open directory", 31);
         return NULL;
     }
@@ -218,23 +224,12 @@ char** wildcard_expansion(char* command, int* numOfElements)
 
     int numOfArgs = 0;
 
-    /*while ((entry = readdir(dir)) != NULL){ // finds all files that follow the pattern
-        if (entry->d_type == DT_REG && entry->d_name[0] != '.'){ // looks to see if the file type is a regular file
-            printf("%s\n", entry->d_name);
-        }
-        //printf("%s", entry->d_name);
-    }*/
-
-
-    //printf("Fuck");
-
+    
     while ((entry = readdir(dir)) != NULL){ // finds all files that follow the pattern
-        if (entry->d_name[0] != '.' && strstr((char*)(entry->d_name), slicedBefore) != NULL && strstr((char*)(entry->d_name), after) != NULL){
+        if (entry->d_name[0] != '.' && strlen(entry->d_name) >= strlen(slicedBefore) && strlen(entry->d_name) >= strlen(after) && strstr((char*)(entry->d_name), slicedBefore) != NULL && strstr((char*)(entry->d_name), after) != NULL){
             numOfArgs++;
             argument_array = (char**)realloc(argument_array, sizeof(char**)*(numOfArgs+1));
             argument_array[numOfArgs-1] = strdup(entry->d_name); // adds applicable files to the argument array
-            
-
         }
     }
 
@@ -249,9 +244,9 @@ char** wildcard_expansion(char* command, int* numOfElements)
         printf("%s\n\n", argument_array[x]);
     }*/
 
-    // creates new string with all arguments found inserted in and replacing the old element with the wildcard
+    
 
-    char **commandToken = str_to_array(command, numOfElements);
+    char **commandToken = str_to_array(command, numOfElements); // creates new string with tokens from command string
 
 
     /*for (int x = 0; x<*numOfElements; x++){
@@ -260,22 +255,21 @@ char** wildcard_expansion(char* command, int* numOfElements)
 
     //printf("%d - %d\n\n", *numOfElements, numOfArgs);
 
-    char** newCommandToken = insertArguments(commandToken, numOfElements, argument_array, numOfArgs);
+    char** newCommandToken = insertArguments(commandToken, numOfElements, argument_array, numOfArgs); // creates new string with all arguments found inserted in and replacing the old element with the wildcard
 
     /*int y = numOfArgs + *numOfElements -1;
     for (int x = 0; x<y; x++){
         printf("GG: %s - %d\n", newCommandToken[x], x);
     }*/
 
-    //printf("\n\n");
 
-    if (strcmp(search_dir, ".")){
+    if (strcmp(search_dir, ".")){ 
         free(search_dir);
     }
     freeArray(argument_array, numOfArgs);
     freeArray(commandToken, *numOfElements);
     
-    *numOfElements = *numOfElements + numOfArgs - 1;
+    *numOfElements = *numOfElements + numOfArgs - 1; // updates the numOfElements to the new len of the char array
 
     return newCommandToken;
 }
@@ -316,13 +310,9 @@ int main(int argc, char** argv){
     // Input loop that enters in to batch or interactive mode depending on the arguments
     char* command_input = "ls ten nine baz/BLUBBER*.txt eight seven"; // if you remove baz/ it looks in the current directory and gets a runtime error
     int numOfElements = 0;
-    //char* args = wildcard_expansion(command_input, &numOfElements);
-
-    //args should become "ls baz/BLUBBER.txt baz/BLUBBERTHTEHEHEHHE.txt" or some combination
     
-    //char** temp = str_to_array(command_input, &numOfElements);
     char** temp = wildcard_expansion(command_input, &numOfElements);
-    printf("\n%d\n", numOfElements);
+    //printf("\n%d\n", numOfElements);
     for (int x = 0; x<numOfElements; x++){
         printf("Token %u: %s\n",x+1, temp[x]);
     }
