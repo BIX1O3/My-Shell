@@ -2,8 +2,10 @@
 #include<unistd.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<fcntl.h>
 #include<string.h>
 #include<stddef.h>
+#include<sys/stat.h>
 #include<dirent.h>
 
 
@@ -298,8 +300,74 @@ int pipe_expansion(char* command){
     return EXIT_SUCCESS;
 }
 
+int batch_mode(int numOfArgs, char** arguments){
+
+    int fd;
+    struct stat fileStat;
+    char buffer;
+    int line_len = 1;
+    char *line = (char*)malloc(1); // initialize as an empty string
+    line[0] = '\0';
+
+    for (int x = 1; x<numOfArgs; x++){
+        //printf("%s\n", arguments[x]);
+        char *path = arguments[x];
+        int file_state = -1;
+
+        if (stat(path, &fileStat) == 0){
+            if (S_ISDIR(fileStat.st_mode)){ // checks if argument is a directory
+                file_state = -1;
+            }
+            else if (S_ISREG(fileStat.st_mode)){ // checks if argument is a regular file
+                file_state = 1;
+            }
+        }
+        if (file_state == -1){ // if it is not a regular file skip
+            write(STDOUT_FILENO, "ERROR incorect file type\n",26);
+            write(STDOUT_FILENO, "Arguments should be a regular File\n",36);
+            continue;
+        }
+
+        fd = open(path, O_RDONLY);
+
+        if (fd == -1){ // ERORR if fails to open file
+            write(STDOUT_FILENO, "ERROR opening files!\n",21);
+            return EXIT_FAILURE;
+        }
+
+        if (file_state){
+            while (read(fd, &buffer, 1) != 0){ // reads through the file one byte at a time 
+                if (buffer != '\n'){ // if buffer is not a \n add the char to the line string
+                    line = (char*)realloc(line, line_len+1);
+                    line[line_len-1] = buffer;
+                    line[line_len] = '\0';
+                    line_len++;
+                }else{ // if buffer is a \n call .... and reset string to a \0
+                    printf("%s\n", line);
+                    line = (char*)realloc(line, 1);
+                    line[0] = '\0';
+                    line_len = 1;
+                }
+                
+            }
+            if (strlen(line)>1){ // if the last line is not a \0  call ... and reset string to a \0
+                printf("%s", line);
+                line = (char*)realloc(line, 1);
+                line[0] = '\0';
+                line_len = 1;
+            }
+        }
+        free(line);
+        close(fd);
+    }
+
+    return EXIT_SUCCESS;
+}
 
 
+void interactive_mode(){
+
+}
 
 
 
@@ -308,7 +376,7 @@ int pipe_expansion(char* command){
 
 int main(int argc, char** argv){
     // Input loop that enters in to batch or interactive mode depending on the arguments
-    char* command_input = "ls ten nine baz/BLUBBER*.txt eight seven"; // if you remove baz/ it looks in the current directory and gets a runtime error
+    /*char* command_input = "ls ten nine baz/BLUBBER*.txt eight seven"; // if you remove baz/ it looks in the current directory and gets a runtime error
     int numOfElements = 0;
     
     char** temp = wildcard_expansion(command_input, &numOfElements);
@@ -317,6 +385,23 @@ int main(int argc, char** argv){
         printf("Token %u: %s\n",x+1, temp[x]);
     }
 
-    freeArray(temp, numOfElements);
+    freeArray(temp, numOfElements);*/
+
+    //Interactive Mode call
+    if (argc == 1){
+        printf("inter");
+    }
+
+    if (argc > 1){
+        batch_mode(argc, argv);
+    }
+
+
+
+
+
+
+
+
     return EXIT_SUCCESS;
 }
