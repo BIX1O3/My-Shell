@@ -148,7 +148,8 @@ char** wildcard_expansion(char* command, int* numOfElements)
             }
         }
     }else if (wildcard == NULL){ // returns tokenized verion of the command input
-        return str_to_array(command, numOfElements);
+        char** array = str_to_array(command, numOfElements);
+        return array;
     }
 
     /*if (strchr(after, "/")){ // If after contains a / the wild card is invalid
@@ -232,6 +233,7 @@ char** wildcard_expansion(char* command, int* numOfElements)
             numOfArgs++;
             argument_array = (char**)realloc(argument_array, sizeof(char**)*(numOfArgs+1));
             argument_array[numOfArgs-1] = strdup(entry->d_name); // adds applicable files to the argument array
+            //if we can't change to using glob then will need to update this above to add in the search_dir before adding the file that matches the pattern to the array
         }
     }
 
@@ -283,20 +285,36 @@ int redirect_expansion(char* command){
 
 
 
+    
+    return EXIT_SUCCESS;
+}
 
+
+int execute_command(char** command, int* numOfElements){
+
+    for (int x = 0; x<*numOfElements; x++){
+        printf("TokenSTD %u: %s\n",x+1, command[x]);
+    }
+
+
+
+
+    freeArray(command, *numOfElements);
     return EXIT_SUCCESS;
 }
 
 //uses pipe() to transfer stdoutput to standard input of the next job
-int pipe_expansion(char* command){
+int execute_pipe_command(char** command, int* numOfElements){
+
+    for (int x = 0; x<*numOfElements; x++){
+        printf("TokenPIPE %u: %s\n",x+1, command[x]);
+    }
 
 
 
 
 
-
-
-
+    freeArray(command, *numOfElements);
     return EXIT_SUCCESS;
 }
 
@@ -309,7 +327,7 @@ int batch_mode(int numOfArgs, char** arguments){
     char *line = (char*)malloc(1); // initialize as an empty string
     line[0] = '\0';
 
-    for (int x = 1; x<numOfArgs; x++){
+    for (int x = 1; x<numOfArgs; x++){ // might be able to remove the loop as the assignment may only run batch for one argument and not multiple
         //printf("%s\n", arguments[x]);
         char *path = arguments[x];
         int file_state = -1;
@@ -343,7 +361,32 @@ int batch_mode(int numOfArgs, char** arguments){
                     line[line_len] = '\0';
                     line_len++;
                 }else{ // if buffer is a \n call .... and reset string to a \0
-                    printf("%s\n", line);
+                    /*printf("\nLine1: %s - %d - %ld\n", line, strcmp(line, "exit"), strlen(line));
+                    int lineSize = strlen(line);
+                    char** templine = wildcard_expansion(line, &lineSize);
+                    
+
+                    if (strcmp(templine[0], "exit") == 0){
+                        write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                        free(line);
+                        exit(EXIT_SUCCESS);
+                    }*/
+
+                    if (strcmp(line, "exit") == 0){ // checks for the exit command
+                        write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                        free(line);
+                        exit(EXIT_SUCCESS);
+                    }
+
+                    char** line_token = wildcard_expansion(line, &line_len);
+
+                    if(strstr(line, "|")){
+                        execute_pipe_command(line_token, &line_len);
+                    }
+                    else{
+                        execute_command(line_token, &line_len);
+                    }
+
                     line = (char*)realloc(line, 1);
                     line[0] = '\0';
                     line_len = 1;
@@ -351,7 +394,21 @@ int batch_mode(int numOfArgs, char** arguments){
                 
             }
             if (strlen(line)>1){ // if the last line is not a \0  call ... and reset string to a \0
-                printf("%s", line);
+                //printf("\nLine1: %s - %d\n", line, strcmp(line, "exit"));
+                if (strcmp(line, "exit") == 0){
+                    write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                    break;
+                }
+
+
+                char** line_token = wildcard_expansion(line, &line_len);
+                 if(strstr(line, "|")){
+                    execute_pipe_command(line_token, &line_len);
+                }
+                else{
+                    execute_command(line_token, &line_len);
+                }
+
                 line = (char*)realloc(line, 1);
                 line[0] = '\0';
                 line_len = 1;
@@ -366,6 +423,51 @@ int batch_mode(int numOfArgs, char** arguments){
 
 
 void interactive_mode(){
+    char buffer;
+    int r;
+    char *line = (char*)malloc(1); // initialize as an empty string
+    line[0] = '\0'; // ensure null terminated
+    int line_len = 1;
+
+    write(STDOUT_FILENO, "Welcome to mysh!\n",18);
+    write(STDOUT_FILENO, "mysh> ", 7);
+    while(1){
+        if ((r = read(STDIN_FILENO, &buffer, 1)) != 0){ // reads through the file one byte at a time 
+            if (buffer != '\n'){ // if buffer is not a \n add the char to the line string
+                line = (char*)realloc(line, line_len+1);
+                line[line_len-1] = buffer;
+                line[line_len] = '\0';
+                line_len++;
+            }else{ // if buffer is a \n call .... and reset string to a \0
+                //printf("\nLine1: %s - %d\n", line, strcmp(line, "exit"));
+                if (strcmp(line, "exit") == 0){ // checks for the exit command
+                    write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                    break;
+                }
+
+                line_len--;
+                char** line_token = wildcard_expansion(line, &line_len); // converts line to a char array and if there is a * present expands the wildcard
+                
+                if(strstr(line, "|")){ 
+                    execute_pipe_command(line_token, &line_len);
+                }
+                else{
+                    execute_command(line_token, &line_len);
+                }
+                
+                line = (char*)realloc(line, 1);
+                line[0] = '\0';
+                line_len = 1;
+                write(STDOUT_FILENO, "mysh> ", 7);
+            }
+            
+        }else if(r<0){ // Error case for read()
+            perror("Error Reading from STDIN");
+            break;
+        }
+    }
+    free(line);
+
 
 }
 
@@ -376,7 +478,7 @@ void interactive_mode(){
 
 int main(int argc, char** argv){
     // Input loop that enters in to batch or interactive mode depending on the arguments
-    /*char* command_input = "ls ten nine baz/BLUBBER*.txt eight seven"; // if you remove baz/ it looks in the current directory and gets a runtime error
+    /*char* command_input = "ls ten nine baz/BLUBBER.txt eight seven"; // if you remove baz/ it looks in the current directory and gets a runtime error
     int numOfElements = 0;
     
     char** temp = wildcard_expansion(command_input, &numOfElements);
@@ -387,20 +489,15 @@ int main(int argc, char** argv){
 
     freeArray(temp, numOfElements);*/
 
-    //Interactive Mode call
-    if (argc == 1){
-        printf("inter");
+    
+    if (argc == 1){ // Interactive Mode call
+        //printf("inter\n");
+        interactive_mode();
     }
 
-    if (argc > 1){
-        batch_mode(argc, argv);
+    if (argc > 1){ // Batch Mode call
+        batch_mode(argc, argv); // might be able to remove the first for loop in batch as the assignment may only run batch for one argument and not multiple
     }
-
-
-
-
-
-
 
 
     return EXIT_SUCCESS;
