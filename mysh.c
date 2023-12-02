@@ -279,28 +279,172 @@ char** wildcard_expansion(char* command, int* numOfElements)
 }
 
 //takes in command and redirects stdinput or stdoutput
-int redirect_expansion(char* command){
-
-
-
-
-
-    
+int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedirect){
+    for (int i = 0; i < numOfArgs; i++) {
+        if (strcmp(args[i], "<") == 0 && i + 1 < numOfArgs) {
+            *inRedirect = open(args[i + 1], O_RDONLY);
+            if (*inRedirect == -1) {
+                perror("open (input redirection)");
+                exit(EXIT_FAILURE);
+            }
+            args[i] = NULL;  
+        } else if (strcmp(args[i], ">") == 0 && i + 1 < numOfArgs) {
+            *outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0640); // S_IRUSR|S_IWUSR|S_IRGRP
+            if (*outRedirect == -1) {
+                perror("open (output redirection)");
+                exit(EXIT_FAILURE);
+            }
+            args[i] = NULL; 
+        }
+    }
     return EXIT_SUCCESS;
 }
 
-
-int execute_command(char** command, int* numOfElements){
-
-    for (int x = 0; x<*numOfElements; x++){
-        printf("TokenSTD %u: %s\n",x+1, command[x]);
+int find_file(char **command) {
+    // token contained /
+    if (strchr(command[0], '/') != NULL) {
+        return 0;
     }
 
+    char *search_paths[] = {"/usr/local/bin", "/usr/bin", "/bin"};
 
+    int bufferSize = 1;  // Initial buffer size
+    char* path = malloc(bufferSize);
+    path[0] = '\0';
 
+    for (int i = 0; i < 3; i++) {
+        bufferSize = strlen(search_paths[i]) + strlen(command[0]) + 2;  
+        char *newPath = realloc(path, bufferSize);
+        if (!newPath) {
+            free(path);
+            return -1; // Handle realloc failure
+        }
+        path = newPath;
+        
+        snprintf(path, bufferSize, "%s/%s", search_paths[i], command[0]); // Use bufferSize
+        if (access(path, X_OK) == 0) {
+            free(command[0]);
+            command[0] = strdup(path);
+            free(path);
+            return 0;
+        }
+    }
 
-    freeArray(command, *numOfElements);
-    return EXIT_SUCCESS;
+    free(path);
+    return -1; // Executable not found
+}
+
+int execute_command(char** args, int numOfArgs) {
+    if(find_file(args) == -1) {
+        fprintf(stderr, "Command not found: %s\n", args[0]);
+        return -1;
+    }
+
+    int pipefd[2];
+    int inRedirect = -1, outRedirect = -1;
+    int pipePos = -1;
+
+    // Check for pipe and redirections
+    for(int i = 0; i < numOfArgs; i++) {
+        if(strcmp(args[i], "|") == 0) {
+            pipePos = i;
+            args[i] = NULL;  // Split the command at the pipe
+        }
+    }
+
+    redirect_expansion(args, numOfArgs, &inRedirect, &outRedirect);
+
+    if(pipePos != -1) {
+        // Create a pipe 
+        if(pipe(pipefd) == -1) {
+            perror("pipe");
+            return -1;
+        }
+    }
+
+    pid_t pid1 = fork();
+    if(pid1 == -1) {
+        perror("fork");
+        return -1;
+    }
+
+    // rudimentary redirect, only handles one at a time
+    /*for (int i = 0; i < numOfArgs; i++) {
+        if (strcmp(args[i], "<") == 0 && i + 1 < numOfArgs) {
+            inRedirect = open(args[i + 1], O_RDONLY);
+            if (inRedirect == -1) {
+                perror("open");
+                return -1;
+            }
+        } else if (strcmp(args[i], ">") == 0 && i + 1 < numOfArgs) {
+            outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (outRedirect == -1) {
+                perror("open");
+                return -1;
+            }
+        }
+    }*/
+    
+    if(pid1 == 0) {
+        // First child process
+        if (pipePos != -1) {
+            dup2(pipefd[1], STDOUT_FILENO);
+        }
+        if (inRedirect != -1) {
+            dup2(inRedirect, STDIN_FILENO);
+            close(inRedirect);
+        }
+        if (outRedirect != -1 && pipePos == -1) {  // Apply outRedirect only if there's no pipe
+            dup2(outRedirect, STDOUT_FILENO);
+            close(outRedirect);
+        }
+        if (pipePos != -1) {
+            close(pipefd[0]);
+            close(pipefd[1]);
+        }
+
+        execv(args[0], args);
+        perror("execv");
+        exit(EXIT_FAILURE);
+    } else {
+        // Parent process
+        if (pipePos != -1) {
+            pid_t pid2 = fork();
+            if (pid2 == -1) {
+                perror("fork");
+                return -1;
+            }
+
+            if (pid2 == 0) {
+                // Second child process for the command after the pipe
+                dup2(pipefd[0], STDIN_FILENO);
+                close(pipefd[0]);
+                close(pipefd[1]);
+
+                char **secondCommand = &args[pipePos + 1];
+                execv(secondCommand[0], secondCommand);
+                perror("execv");
+                exit(EXIT_FAILURE);
+            } else {
+                close(pipefd[0]);
+                close(pipefd[1]);
+            }
+        }
+
+        if (inRedirect != -1) {
+            close(inRedirect);
+        }
+        if (outRedirect != -1) {
+            close(outRedirect);
+        }
+
+        int status;
+        waitpid(pid1, &status, 0); 
+        if (pipePos != -1) {
+            waitpid(pid2, &status, 0); 
+        }
+        return WEXITSTATUS(status);
+    }
 }
 
 //uses pipe() to transfer stdoutput to standard input of the next job
