@@ -328,7 +328,6 @@ int batch_mode(int numOfArgs, char** arguments){
     line[0] = '\0';
 
     for (int x = 1; x<numOfArgs; x++){ // might be able to remove the loop as the assignment may only run batch for one argument and not multiple
-        //printf("%s\n", arguments[x]);
         char *path = arguments[x];
         int file_state = -1;
 
@@ -354,6 +353,7 @@ int batch_mode(int numOfArgs, char** arguments){
         }
 
         if (file_state){
+            int e = 0;
             while (read(fd, &buffer, 1) != 0){ // reads through the file one byte at a time 
                 if (buffer != '\n'){ // if buffer is not a \n add the char to the line string
                     line = (char*)realloc(line, line_len+1);
@@ -361,32 +361,46 @@ int batch_mode(int numOfArgs, char** arguments){
                     line[line_len] = '\0';
                     line_len++;
                 }else{ // if buffer is a \n call .... and reset string to a \0
-                    /*printf("\nLine1: %s - %d - %ld\n", line, strcmp(line, "exit"), strlen(line));
-                    int lineSize = strlen(line);
-                    char** templine = wildcard_expansion(line, &lineSize);
-                    
-
-                    if (strcmp(templine[0], "exit") == 0){
+                    int e = 0;
+                if (strcmp(line, "exit") == 0){ // checks for the exit command
+                    write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                    free(line);
+                    exit(EXIT_SUCCESS);
+                }else if (strstr(line, "exit")){ // search to see if exit is the first word on the command
+                    char* tmp_line = line;
+                    e = 0;
+                    for (int i = 0; i < strlen(line); i++){
+                        if (line[i] == ' '){
+                            tmp_line++;
+                        }else if (strstr(tmp_line, "exit") && (tmp_line[4] == ' ' || tmp_line[4] == '\0')){ // checks to see if exit is the only word in the line
+                            e = 1;
+                            i+=3;
+                        }else if(line != strstr(line, "exit") && line[i] != ' '){ // exit is not at the start
+                            e = 0;
+                            break;
+                        }else{
+                            e = -1; // there are to many arguments
+                            break;
+                        }
+                    }
+                    if (e == 1){
                         write (STDOUT_FILENO, "mysh: exitting\n", 16);
                         free(line);
                         exit(EXIT_SUCCESS);
-                    }*/
-
-                    if (strcmp(line, "exit") == 0){ // checks for the exit command
-                        write (STDOUT_FILENO, "mysh: exitting\n", 16);
-                        free(line);
-                        exit(EXIT_SUCCESS);
+                    }else if (e == -1){
+                        write (STDOUT_FILENO, "exit: too many arguments\n", 26);
                     }
+                }
+                    if (e == 0){
+                        char** line_token = wildcard_expansion(line, &line_len);
 
-                    char** line_token = wildcard_expansion(line, &line_len);
-
-                    if(strstr(line, "|")){
-                        execute_pipe_command(line_token, &line_len);
+                        if(strstr(line, "|")){
+                            execute_pipe_command(line_token, &line_len);
+                        }
+                        else{
+                            execute_command(line_token, &line_len);
+                        }
                     }
-                    else{
-                        execute_command(line_token, &line_len);
-                    }
-
                     line = (char*)realloc(line, 1);
                     line[0] = '\0';
                     line_len = 1;
@@ -394,21 +408,20 @@ int batch_mode(int numOfArgs, char** arguments){
                 
             }
             if (strlen(line)>1){ // if the last line is not a \0  call ... and reset string to a \0
-                //printf("\nLine1: %s - %d\n", line, strcmp(line, "exit"));
                 if (strcmp(line, "exit") == 0){
                     write (STDOUT_FILENO, "mysh: exitting\n", 16);
                     break;
                 }
 
-
-                char** line_token = wildcard_expansion(line, &line_len);
-                 if(strstr(line, "|")){
-                    execute_pipe_command(line_token, &line_len);
+                if (e == 0){
+                    char** line_token = wildcard_expansion(line, &line_len);
+                    if(strstr(line, "|")){
+                        execute_pipe_command(line_token, &line_len);
+                    }
+                    else{
+                        execute_command(line_token, &line_len);
+                    }
                 }
-                else{
-                    execute_command(line_token, &line_len);
-                }
-
                 line = (char*)realloc(line, 1);
                 line[0] = '\0';
                 line_len = 1;
@@ -439,26 +452,52 @@ void interactive_mode(){
                 line[line_len] = '\0';
                 line_len++;
             }else{ // if buffer is a \n call .... and reset string to a \0
-                //printf("\nLine1: %s - %d\n", line, strcmp(line, "exit"));
+                int e = 0;
                 if (strcmp(line, "exit") == 0){ // checks for the exit command
                     write (STDOUT_FILENO, "mysh: exitting\n", 16);
-                    break;
+                    exit(EXIT_SUCCESS);
+                }else if (strstr(line, "exit")){ // search to see if exit is the first word on the command
+                    char* tmp_line = line;
+                    
+                    for (int i = 0; i < strlen(line); i++){
+                        if (line[i] == ' '){
+                            tmp_line++;
+                        }else if (strstr(tmp_line, "exit") && (tmp_line[4] == ' ' || tmp_line[4] == '\0')){
+                            e = 1;
+                            i+=3;
+                        }else if(line != strstr(line, "exit") && line[i] != ' '){ // exit is not at the start
+                            e = 0;
+                            break;
+                        }else{
+                            e = -1;
+                            break;
+                        }
+                    }
+                    if (e == 1){
+                        write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                        exit(EXIT_SUCCESS);
+                    }else if (e == -1){
+                        write (STDOUT_FILENO, "exit: too many arguments\n", 26);
+                    }
                 }
 
-                line_len--;
-                char** line_token = wildcard_expansion(line, &line_len); // converts line to a char array and if there is a * present expands the wildcard
                 
-                if(strstr(line, "|")){ 
-                    execute_pipe_command(line_token, &line_len);
-                }
-                else{
-                    execute_command(line_token, &line_len);
-                }
+                if (e == 0){
+                    line_len--;
+                    char** line_token = wildcard_expansion(line, &line_len); // converts line to a char array and if there is a * present expands the wildcard
+                    
+                    if(strstr(line, "|")){ 
+                        execute_pipe_command(line_token, &line_len);
+                    }
+                    else{
+                        execute_command(line_token, &line_len);
+                    }
+                }    
+                    line = (char*)realloc(line, 1);
+                    line[0] = '\0';
+                    line_len = 1;
+                    write(STDOUT_FILENO, "mysh> ", 7);
                 
-                line = (char*)realloc(line, 1);
-                line[0] = '\0';
-                line_len = 1;
-                write(STDOUT_FILENO, "mysh> ", 7);
             }
             
         }else if(r<0){ // Error case for read()
