@@ -106,7 +106,6 @@ char** str_to_array(char *initial, int *numOfElements){
             x += tokenlen-1;
             index++;
         }
-        
         x += strspn(initial + x, space)-1; // skips to the next space
     }
 
@@ -373,7 +372,6 @@ int cd(char** args, int numOfElements){
 }
 
 
-
 int execute_command(char** args, int numOfArgs) {
     args = (char**)realloc(args, (numOfArgs + 1) * sizeof(char*));
 
@@ -383,7 +381,6 @@ int execute_command(char** args, int numOfArgs) {
     }
 
     args[numOfArgs] = NULL;
-
 
 
     int ex = 0;
@@ -417,6 +414,7 @@ int execute_command(char** args, int numOfArgs) {
         }
 
         redirect_expansion(args, numOfArgs, &inRedirect, &outRedirect);
+
 
         if(pipePos != -1) {
             // Create a pipe 
@@ -511,9 +509,13 @@ int execute_command(char** args, int numOfArgs) {
                 waitpid(pid2, &status, 0); 
             }
             freeArray(args, numOfArgs+1);
+            
             return WEXITSTATUS(status);
         }
     }
+    
+    
+
     freeArray(args, numOfArgs+1);
     return EXIT_SUCCESS;
 }
@@ -699,12 +701,8 @@ void interactive_mode(){
                     line_len--;
                     char** line_token = wildcard_expansion(line, &line_len); // converts line to a char array and if there is a * present expands the wildcard
                     
-                    if(strstr(line, "|")){ 
-                        execute_pipe_command(line_token, &line_len);
-                    }
-                    else{
-                        execute_command(line_token, line_len);
-                    }
+                    execute_command(line_token, line_len);
+                    
                 }    
                 line = (char*)realloc(line, 1);
                 line[0] = '\0';
@@ -733,7 +731,7 @@ void interactive_mode(){
 int main(int argc, char** argv){
     
 
-    /*char* test[] = {"/usr/bin/rm", "create.txt", NULL};
+    /*char* test[] = {"/usr/bin/ls", NULL, "lt.txt", NULL};
 
     execv(test[0], test);
 
