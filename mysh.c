@@ -251,6 +251,7 @@ int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedi
             *inRedirect = open(args[i + 1], O_RDONLY);
             if (*inRedirect == -1) {
                 perror("open (input redirection)");
+                freeArray(args, numOfArgs+1);
                 exit(EXIT_FAILURE);
             }
             args[i] = NULL;  
@@ -258,11 +259,13 @@ int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedi
             *outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0640); // S_IRUSR|S_IWUSR|S_IRGRP
             if (*outRedirect == -1) {
                 perror("open (output redirection)");
+                freeArray(args, numOfArgs+1);
                 exit(EXIT_FAILURE);
             }
             args[i] = NULL; 
         }
     }
+    freeArray(args, numOfArgs+1);
     return EXIT_SUCCESS;
 }
 
@@ -377,6 +380,7 @@ int execute_command(char** args, int numOfArgs) {
 
     if (args == NULL) {
         perror("Memory reallocation failed");
+        freeArray(args, numOfArgs+1);
         exit(EXIT_FAILURE);
     }
 
@@ -398,6 +402,7 @@ int execute_command(char** args, int numOfArgs) {
     if (ex == 0){
         if(find_file(args) == -1) {
             fprintf(stderr, "Command not found: %s\n", args[0]);
+            freeArray(args, numOfArgs+1);
             return -1;
         }
 
@@ -420,6 +425,7 @@ int execute_command(char** args, int numOfArgs) {
             // Create a pipe 
             if(pipe(pipefd) == -1) {
                 perror("pipe");
+                freeArray(args, numOfArgs+1);
                 return -1;
             }
         }
@@ -427,6 +433,7 @@ int execute_command(char** args, int numOfArgs) {
         pid_t pid1 = fork();
         if(pid1 == -1) {
             perror("fork");
+            freeArray(args, numOfArgs+1);
             return -1;
         }
 
@@ -476,6 +483,7 @@ int execute_command(char** args, int numOfArgs) {
                 pid2 = fork();
                 if (pid2 == -1) {
                     perror("fork");
+                    freeArray(args, numOfArgs+1);
                     return -1;
                 }
 
