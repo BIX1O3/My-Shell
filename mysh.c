@@ -6,6 +6,8 @@
 #include<string.h>
 #include<stddef.h>
 #include<sys/stat.h>
+#include<sys/types.h>
+#include<sys/wait.h>
 #include<dirent.h>
 
 
@@ -27,12 +29,9 @@ char** insertArguments(char** token, int* len1, char** arguments, int len2) {
             index = x;
         }
     }
-    //printf("%d\n\n", index);
     
 
     int newSize = *len1 + len2-1; // size of the new char array
-
-    //printf("%d\n",newSize);
 
     char** newCommand = (char**)malloc((newSize + 1) * sizeof(char*));
 
@@ -46,7 +45,6 @@ char** insertArguments(char** token, int* len1, char** arguments, int len2) {
         if (x == index){
             for (int i = 0; i < len2; i++){ // inserts the elements from arguments when the index of the element with the wildcard is hit
                 newCommand[x] = strdup(arguments[i]);
-                //printf("%s - %d\n", newCommand[x], x);
                 x++;
                 temp++;
             }
@@ -54,7 +52,6 @@ char** insertArguments(char** token, int* len1, char** arguments, int len2) {
             x--;
         }else{ // populates the new array with the elements from the original token array
             newCommand[x] = strdup(token[x-temp]);
-            //printf("%s - %d\n", newCommand[x], x);
         }
     }
 
@@ -81,7 +78,7 @@ char** str_to_array(char *initial, int *numOfElements){
 
     *numOfElements = count; // updates the numOfElements
 
-    char** array = (char**)malloc(count*sizeof(char*));
+    char** array = (char**)malloc((count*sizeof(char*)));
 
     if (array == NULL){ // if malloc fails return NULL
         return NULL;
@@ -106,7 +103,6 @@ char** str_to_array(char *initial, int *numOfElements){
             memcpy(array[index], initial+x, tokenlen); // populates the array index with the substring
             array[index][tokenlen] = '\0';
             tokenlen++;
-            //printf("%s\n", array[index]);
             x += tokenlen-1;
             index++;
         }
@@ -152,10 +148,6 @@ char** wildcard_expansion(char* command, int* numOfElements)
         return array;
     }
 
-    /*if (strchr(after, "/")){ // If after contains a / the wild card is invalid
-            //still need to add the error statement
-    }*/
-
     
     if (wildcard != NULL){ // finds the characters before the *
         char* spaceBefore = wildcard;
@@ -176,8 +168,6 @@ char** wildcard_expansion(char* command, int* numOfElements)
             }
             before[lenB] = '\0';
         }
-
-        //printf("- %s * %s\n", before, after);
     }
 
 
@@ -208,9 +198,6 @@ char** wildcard_expansion(char* command, int* numOfElements)
         search_dir[lenS] = '\0';
     }
 
-    //printf("%s",slash);
-    //printf("\n- %s\n\n", search_dir);
-
     DIR *dir;
     struct dirent *entry;
 
@@ -233,38 +220,18 @@ char** wildcard_expansion(char* command, int* numOfElements)
             numOfArgs++;
             argument_array = (char**)realloc(argument_array, sizeof(char**)*(numOfArgs+1));
             argument_array[numOfArgs-1] = strdup(entry->d_name); // adds applicable files to the argument array
-            //if we can't change to using glob then will need to update this above to add in the search_dir before adding the file that matches the pattern to the array
         }
     }
-
-    //printf("%s -  %s \n\n", before, after);
 
     free(after);
     free(before);
     closedir(dir);
 
-    
-    /*for (int x = 0; x<numOfArgs; x++){
-        printf("%s\n\n", argument_array[x]);
-    }*/
-
-    
 
     char **commandToken = str_to_array(command, numOfElements); // creates new string with tokens from command string
 
 
-    /*for (int x = 0; x<*numOfElements; x++){
-        printf("Token1 %u: %s\n",x+1, commandToken[x]);
-    }*/
-
-    //printf("%d - %d\n\n", *numOfElements, numOfArgs);
-
     char** newCommandToken = insertArguments(commandToken, numOfElements, argument_array, numOfArgs); // creates new string with all arguments found inserted in and replacing the old element with the wildcard
-
-    /*int y = numOfArgs + *numOfElements -1;
-    for (int x = 0; x<y; x++){
-        printf("GG: %s - %d\n", newCommandToken[x], x);
-    }*/
 
 
     if (strcmp(search_dir, ".")){ 
@@ -300,6 +267,7 @@ int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedi
     return EXIT_SUCCESS;
 }
 
+
 int find_file(char **command) {
     // token contained /
     if (strchr(command[0], '/') != NULL) {
@@ -334,117 +302,220 @@ int find_file(char **command) {
     return -1; // Executable not found
 }
 
-int execute_command(char** args, int numOfArgs) {
-    if(find_file(args) == -1) {
-        fprintf(stderr, "Command not found: %s\n", args[0]);
-        return -1;
+
+int which(char** args, int numOfElements){
+    int built_in = 0;
+    if (strcmp(args[0], "which") == 0){
+        if (numOfElements == 2){
+            if (strcmp(args[1], "which") == 0){
+                printf("which: shell built-in command\n");
+                built_in = 1;
+            }else if (strcmp(args[1], "pwd") == 0){
+                printf("pwd: shell built-in command\n");
+                built_in = 1;
+            }else if (strcmp(args[1], "cd") == 0){
+                printf("cd: shell built-in command\n");
+                built_in = 1;
+            }else if (strcmp(args[1], "exit") == 0){
+                printf("exit: shell built-in command\n");
+                built_in = 1;
+            }
+
+            if (built_in == 0){
+                if(((find_file(args+1) == 0) && (args[1] != NULL)) || numOfElements < 2){
+                    printf("%s\n", args[1]);
+                }else{
+                    perror("which");
+                }
+            }
+        }else{
+            write(STDOUT_FILENO, "which: Incorrect number of arguments\n", 38);
+        }
     }
+    
 
-    int pipefd[2];
-    int inRedirect = -1, outRedirect = -1;
-    int pipePos = -1;
 
-    // Check for pipe and redirections
-    for(int i = 0; i < numOfArgs; i++) {
-        if(strcmp(args[i], "|") == 0) {
-            pipePos = i;
-            args[i] = NULL;  // Split the command at the pipe
+    return EXIT_SUCCESS;
+}
+
+
+int pwd(char** args, int numOfElements){
+
+    if (strcmp(args[0], "pwd") == 0){
+           
+        char cwd[5000];
+        if (getcwd(cwd,sizeof(cwd)) != NULL){
+            printf("%s\n", cwd);
+        }else{
+            perror("pwd");
+        }
+        
+    }
+    return EXIT_SUCCESS;
+}
+
+
+int cd(char** args, int numOfElements){
+
+    if (strcmp(args[0], "cd") == 0){
+        if (numOfElements == 2){
+            if (args[1] == NULL || numOfElements > 2){
+                write(STDERR_FILENO, "cd: too many arguments\n", 24);
+            }else if (chdir(args[1]) != 0){
+                perror("cd");
+            }
+        }else{
+            write(STDERR_FILENO, "cd: Incorrect number of arguments\n", 35);
         }
     }
 
-    redirect_expansion(args, numOfArgs, &inRedirect, &outRedirect);
+    return EXIT_SUCCESS;
+}
 
-    if(pipePos != -1) {
-        // Create a pipe 
-        if(pipe(pipefd) == -1) {
-            perror("pipe");
+
+
+int execute_command(char** args, int numOfArgs) {
+    args = (char**)realloc(args, (numOfArgs + 1) * sizeof(char*));
+
+    if (args == NULL) {
+        perror("Memory reallocation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    args[numOfArgs] = NULL;
+
+
+
+    int ex = 0;
+    if (strcmp(args[0], "cd") == 0){
+        cd(args, numOfArgs);
+        ex = 1;
+    }else if (strcmp(args[0], "pwd") == 0){
+        pwd(args, numOfArgs);
+        ex = 1;
+    }else if (strcmp(args[0], "which") == 0){
+        which(args, numOfArgs);
+        ex = 1;
+    }
+
+    if (ex == 0){
+        if(find_file(args) == -1) {
+            fprintf(stderr, "Command not found: %s\n", args[0]);
             return -1;
         }
-    }
 
-    pid_t pid1 = fork();
-    if(pid1 == -1) {
-        perror("fork");
-        return -1;
-    }
+        int pipefd[2];
+        int inRedirect = -1, outRedirect = -1;
+        int pipePos = -1;
 
-    // rudimentary redirect, only handles one at a time
-    /*for (int i = 0; i < numOfArgs; i++) {
-        if (strcmp(args[i], "<") == 0 && i + 1 < numOfArgs) {
-            inRedirect = open(args[i + 1], O_RDONLY);
-            if (inRedirect == -1) {
-                perror("open");
-                return -1;
-            }
-        } else if (strcmp(args[i], ">") == 0 && i + 1 < numOfArgs) {
-            outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-            if (outRedirect == -1) {
-                perror("open");
-                return -1;
+        // Check for pipe and redirections
+        for(int i = 0; i < numOfArgs; i++) {
+            if(strcmp(args[i], "|") == 0) {
+                pipePos = i;
+                args[i] = NULL;  // Split the command at the pipe
             }
         }
-    }*/
-    
-    if(pid1 == 0) {
-        // First child process
-        if (pipePos != -1) {
-            dup2(pipefd[1], STDOUT_FILENO);
-        }
-        if (inRedirect != -1) {
-            dup2(inRedirect, STDIN_FILENO);
-            close(inRedirect);
-        }
-        if (outRedirect != -1 && pipePos == -1) {  // Apply outRedirect only if there's no pipe
-            dup2(outRedirect, STDOUT_FILENO);
-            close(outRedirect);
-        }
-        if (pipePos != -1) {
-            close(pipefd[0]);
-            close(pipefd[1]);
-        }
 
-        execv(args[0], args);
-        perror("execv");
-        exit(EXIT_FAILURE);
-    } else {
-        // Parent process
-        if (pipePos != -1) {
-            pid_t pid2 = fork();
-            if (pid2 == -1) {
-                perror("fork");
+        redirect_expansion(args, numOfArgs, &inRedirect, &outRedirect);
+
+        if(pipePos != -1) {
+            // Create a pipe 
+            if(pipe(pipefd) == -1) {
+                perror("pipe");
                 return -1;
             }
+        }
 
-            if (pid2 == 0) {
-                // Second child process for the command after the pipe
-                dup2(pipefd[0], STDIN_FILENO);
-                close(pipefd[0]);
-                close(pipefd[1]);
+        pid_t pid1 = fork();
+        if(pid1 == -1) {
+            perror("fork");
+            return -1;
+        }
 
-                char **secondCommand = &args[pipePos + 1];
-                execv(secondCommand[0], secondCommand);
-                perror("execv");
-                exit(EXIT_FAILURE);
-            } else {
+        // rudimentary redirect, only handles one at a time
+        /*for (int i = 0; i < numOfArgs; i++) {
+            if (strcmp(args[i], "<") == 0 && i + 1 < numOfArgs) {
+                inRedirect = open(args[i + 1], O_RDONLY);
+                if (inRedirect == -1) {
+                    perror("open");
+                    return -1;
+                }
+            } else if (strcmp(args[i], ">") == 0 && i + 1 < numOfArgs) {
+                outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (outRedirect == -1) {
+                    perror("open");
+                    return -1;
+                }
+            }
+        }*/
+        
+        if(pid1 == 0) {
+            // First child process
+            if (pipePos != -1) {
+                dup2(pipefd[1], STDOUT_FILENO);
+            }
+            if (inRedirect != -1) {
+                dup2(inRedirect, STDIN_FILENO);
+                close(inRedirect);
+            }
+            if (outRedirect != -1 && pipePos == -1) {  // Apply outRedirect only if there's no pipe
+                dup2(outRedirect, STDOUT_FILENO);
+                close(outRedirect);
+            }
+            if (pipePos != -1) {
                 close(pipefd[0]);
                 close(pipefd[1]);
             }
-        }
 
-        if (inRedirect != -1) {
-            close(inRedirect);
-        }
-        if (outRedirect != -1) {
-            close(outRedirect);
-        }
+            execv(args[0], args);
+            perror("execv");
+            freeArray(args, numOfArgs+1);
+            exit(EXIT_FAILURE);
+        } else {
+            // Parent process
+            pid_t pid2 = -1;
+            if (pipePos != -1) {
+                pid2 = fork();
+                if (pid2 == -1) {
+                    perror("fork");
+                    return -1;
+                }
 
-        int status;
-        waitpid(pid1, &status, 0); 
-        if (pipePos != -1) {
-            waitpid(pid2, &status, 0); 
+                if (pid2 == 0) {
+                    // Second child process for the command after the pipe
+                    dup2(pipefd[0], STDIN_FILENO);
+                    close(pipefd[0]);
+                    close(pipefd[1]);
+
+                    char **secondCommand = &args[pipePos + 1];
+                    execv(secondCommand[0], secondCommand);
+                    perror("execv");
+                    freeArray(args, numOfArgs+1);
+                    exit(EXIT_FAILURE);
+                } else {
+                    close(pipefd[0]);
+                    close(pipefd[1]);
+                }
+            }
+
+            if (inRedirect != -1) {
+                close(inRedirect);
+            }
+            if (outRedirect != -1) {
+                close(outRedirect);
+            }
+
+            int status;
+            waitpid(pid1, &status, 0); 
+            if (pipePos != -1) {
+                waitpid(pid2, &status, 0); 
+            }
+            freeArray(args, numOfArgs+1);
+            return WEXITSTATUS(status);
         }
-        return WEXITSTATUS(status);
     }
+    freeArray(args, numOfArgs+1);
+    return EXIT_SUCCESS;
 }
 
 //uses pipe() to transfer stdoutput to standard input of the next job
@@ -454,13 +525,11 @@ int execute_pipe_command(char** command, int* numOfElements){
         printf("TokenPIPE %u: %s\n",x+1, command[x]);
     }
 
-
-
-
-
     freeArray(command, *numOfElements);
     return EXIT_SUCCESS;
 }
+
+
 
 int batch_mode(int numOfArgs, char** arguments){
 
@@ -504,37 +573,37 @@ int batch_mode(int numOfArgs, char** arguments){
                     line[line_len-1] = buffer;
                     line[line_len] = '\0';
                     line_len++;
-                }else{ // if buffer is a \n call .... and reset string to a \0
+                }else if (line_len > 1){ // if buffer is a \n call .... and reset string to a \0
                     int e = 0;
-                if (strcmp(line, "exit") == 0){ // checks for the exit command
-                    write (STDOUT_FILENO, "mysh: exitting\n", 16);
-                    free(line);
-                    exit(EXIT_SUCCESS);
-                }else if (strstr(line, "exit")){ // search to see if exit is the first word on the command
-                    char* tmp_line = line;
-                    e = 0;
-                    for (int i = 0; i < strlen(line); i++){
-                        if (line[i] == ' '){
-                            tmp_line++;
-                        }else if (strstr(tmp_line, "exit") && (tmp_line[4] == ' ' || tmp_line[4] == '\0')){ // checks to see if exit is the only word in the line
-                            e = 1;
-                            i+=3;
-                        }else if(line != strstr(line, "exit") && line[i] != ' '){ // exit is not at the start
-                            e = 0;
-                            break;
-                        }else{
-                            e = -1; // there are to many arguments
-                            break;
-                        }
-                    }
-                    if (e == 1){
-                        write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                    if (strcmp(line, "exit") == 0){ // checks for the exit command
+                        write (STDOUT_FILENO, "mysh: exiting\n", 15);
                         free(line);
                         exit(EXIT_SUCCESS);
-                    }else if (e == -1){
-                        write (STDOUT_FILENO, "exit: too many arguments\n", 26);
+                    }else if (strstr(line, "exit")){ // search to see if exit is the first word on the command
+                        char* tmp_line = line;
+                        e = 0;
+                        for (int i = 0; i < strlen(line); i++){
+                            if (line[i] == ' '){
+                                tmp_line++;
+                            }else if (strstr(tmp_line, "exit") && (tmp_line[4] == ' ' || tmp_line[4] == '\0')){ // checks to see if exit is the only word in the line
+                                e = 1;
+                                i+=3;
+                            }else if(line != strstr(line, "exit") && line[i] != ' '){ // exit is not at the start
+                                e = 0;
+                                break;
+                            }else{
+                                e = -1; // there are to many arguments
+                                break;
+                            }
+                        }
+                        if (e == 1){
+                            write (STDOUT_FILENO, "mysh: exiting\n", 15);
+                            free(line);
+                            exit(EXIT_SUCCESS);
+                        }else if (e == -1){
+                            write (STDOUT_FILENO, "exit: too many arguments\n", 26);
+                        }
                     }
-                }
                     if (e == 0){
                         char** line_token = wildcard_expansion(line, &line_len);
 
@@ -542,7 +611,7 @@ int batch_mode(int numOfArgs, char** arguments){
                             execute_pipe_command(line_token, &line_len);
                         }
                         else{
-                            execute_command(line_token, &line_len);
+                            execute_command(line_token, line_len);
                         }
                     }
                     line = (char*)realloc(line, 1);
@@ -553,7 +622,7 @@ int batch_mode(int numOfArgs, char** arguments){
             }
             if (strlen(line)>1){ // if the last line is not a \0  call ... and reset string to a \0
                 if (strcmp(line, "exit") == 0){
-                    write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                    write (STDOUT_FILENO, "mysh: exiting\n", 15);
                     break;
                 }
 
@@ -563,7 +632,7 @@ int batch_mode(int numOfArgs, char** arguments){
                         execute_pipe_command(line_token, &line_len);
                     }
                     else{
-                        execute_command(line_token, &line_len);
+                        execute_command(line_token, line_len);
                     }
                 }
                 line = (char*)realloc(line, 1);
@@ -587,7 +656,7 @@ void interactive_mode(){
     int line_len = 1;
 
     write(STDOUT_FILENO, "Welcome to mysh!\n",18);
-    write(STDOUT_FILENO, "mysh> ", 7);
+    write(STDOUT_FILENO, "\nmysh> ", 8);
     while(1){
         if ((r = read(STDIN_FILENO, &buffer, 1)) != 0){ // reads through the file one byte at a time 
             if (buffer != '\n'){ // if buffer is not a \n add the char to the line string
@@ -595,10 +664,10 @@ void interactive_mode(){
                 line[line_len-1] = buffer;
                 line[line_len] = '\0';
                 line_len++;
-            }else{ // if buffer is a \n call .... and reset string to a \0
+            }else if (line_len > 1){ // if buffer is a \n call .... and reset string to a \0
                 int e = 0;
                 if (strcmp(line, "exit") == 0){ // checks for the exit command
-                    write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                    write (STDOUT_FILENO, "mysh: exiting\n", 15);
                     exit(EXIT_SUCCESS);
                 }else if (strstr(line, "exit")){ // search to see if exit is the first word on the command
                     char* tmp_line = line;
@@ -618,7 +687,7 @@ void interactive_mode(){
                         }
                     }
                     if (e == 1){
-                        write (STDOUT_FILENO, "mysh: exitting\n", 16);
+                        write (STDOUT_FILENO, "mysh: exiting\n", 15);
                         exit(EXIT_SUCCESS);
                     }else if (e == -1){
                         write (STDOUT_FILENO, "exit: too many arguments\n", 26);
@@ -634,14 +703,16 @@ void interactive_mode(){
                         execute_pipe_command(line_token, &line_len);
                     }
                     else{
-                        execute_command(line_token, &line_len);
+                        execute_command(line_token, line_len);
                     }
                 }    
-                    line = (char*)realloc(line, 1);
-                    line[0] = '\0';
-                    line_len = 1;
-                    write(STDOUT_FILENO, "mysh> ", 7);
+                line = (char*)realloc(line, 1);
+                line[0] = '\0';
+                line_len = 1;
+                write(STDOUT_FILENO, "\nmysh> ", 8);
                 
+            }else{
+                write(STDOUT_FILENO, "\nmysh> ", 8);
             }
             
         }else if(r<0){ // Error case for read()
@@ -660,17 +731,15 @@ void interactive_mode(){
 
 
 int main(int argc, char** argv){
-    // Input loop that enters in to batch or interactive mode depending on the arguments
-    /*char* command_input = "ls ten nine baz/BLUBBER.txt eight seven"; // if you remove baz/ it looks in the current directory and gets a runtime error
-    int numOfElements = 0;
     
-    char** temp = wildcard_expansion(command_input, &numOfElements);
-    //printf("\n%d\n", numOfElements);
-    for (int x = 0; x<numOfElements; x++){
-        printf("Token %u: %s\n",x+1, temp[x]);
-    }
 
-    freeArray(temp, numOfElements);*/
+    /*char* test[] = {"/usr/bin/rm", "create.txt", NULL};
+
+    execv(test[0], test);
+
+    perror("execv");*/
+
+
 
     
     if (argc == 1){ // Interactive Mode call
@@ -681,7 +750,6 @@ int main(int argc, char** argv){
     if (argc > 1){ // Batch Mode call
         batch_mode(argc, argv); // might be able to remove the first for loop in batch as the assignment may only run batch for one argument and not multiple
     }
-
 
     return EXIT_SUCCESS;
 }
