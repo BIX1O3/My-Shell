@@ -246,7 +246,7 @@ char** wildcard_expansion(char* command, int* numOfElements)
 
 //takes in command and redirects stdinput or stdoutput
 int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedirect){
-    for (int i = 0; i < numOfArgs; i++) {
+    for (int i = 0; i < numOfArgs && args[i] != NULL; i++) {
         if (strcmp(args[i], "<") == 0 && i + 1 < numOfArgs) {
             *inRedirect = open(args[i + 1], O_RDONLY);
             if (*inRedirect == -1) {
@@ -256,7 +256,7 @@ int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedi
             }
             args[i] = NULL;  
         } else if (strcmp(args[i], ">") == 0 && i + 1 < numOfArgs) {
-            *outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0640); // S_IRUSR|S_IWUSR|S_IRGRP
+            *outRedirect = open(args[i + 1], O_WRONLY | O_CREAT | O_TRUNC, 0644); // S_IRUSR|S_IWUSR|S_IRGRP
             if (*outRedirect == -1) {
                 perror("open (output redirection)");
                 freeArray(args, numOfArgs+1);
@@ -265,7 +265,7 @@ int redirect_expansion(char **args, int numOfArgs, int *inRedirect, int *outRedi
             args[i] = NULL; 
         }
     }
-    freeArray(args, numOfArgs+1);
+    //freeArray(args, numOfArgs+1);
     return EXIT_SUCCESS;
 }
 
@@ -410,30 +410,31 @@ int execute_command(char** args, int numOfArgs) {
         int inRedirect = -1, outRedirect = -1;
         int pipePos = -1;
 
-        // Check for pipe and redirections
+        // Check for pipe 
         for(int i = 0; i < numOfArgs; i++) {
             if(strcmp(args[i], "|") == 0) {
                 pipePos = i;
                 args[i] = NULL;  // Split the command at the pipe
+                break;
+            }
+        }
+
+        if(pipePos != -1) {
+            // Create a pipe 
+            if(pipe(pipefd) == -1) {
+                perror("pipe");
+                //freeArray(args, numOfArgs+1);
+                return -1;
             }
         }
 
         redirect_expansion(args, numOfArgs, &inRedirect, &outRedirect);
 
 
-        if(pipePos != -1) {
-            // Create a pipe 
-            if(pipe(pipefd) == -1) {
-                perror("pipe");
-                freeArray(args, numOfArgs+1);
-                return -1;
-            }
-        }
-
         pid_t pid1 = fork();
         if(pid1 == -1) {
             perror("fork");
-            freeArray(args, numOfArgs+1);
+            //freeArray(args, numOfArgs+1);
             return -1;
         }
 
@@ -457,7 +458,9 @@ int execute_command(char** args, int numOfArgs) {
         if(pid1 == 0) {
             // First child process
             if (pipePos != -1) {
+                close(pipefd[0]);
                 dup2(pipefd[1], STDOUT_FILENO);
+                close(pipefd[1]);
             }
             if (inRedirect != -1) {
                 dup2(inRedirect, STDIN_FILENO);
@@ -467,10 +470,7 @@ int execute_command(char** args, int numOfArgs) {
                 dup2(outRedirect, STDOUT_FILENO);
                 close(outRedirect);
             }
-            if (pipePos != -1) {
-                close(pipefd[0]);
-                close(pipefd[1]);
-            }
+
 
             execv(args[0], args);
             perror("execv");
@@ -489,13 +489,12 @@ int execute_command(char** args, int numOfArgs) {
 
                 if (pid2 == 0) {
                     // Second child process for the command after the pipe
+                    close(pipefd[1]);
                     dup2(pipefd[0], STDIN_FILENO);
                     close(pipefd[0]);
-                    close(pipefd[1]);
 
-                    char **secondCommand = &args[pipePos + 1];
-                    execv(secondCommand[0], secondCommand);
-                    perror("execv");
+                    execv(args[pipePos + 1], &args[pipePos + 1]);
+                    perror("execv"); 
                     freeArray(args, numOfArgs+1);
                     exit(EXIT_FAILURE);
                 } else {
@@ -617,12 +616,7 @@ int batch_mode(int numOfArgs, char** arguments){
                     if (e == 0){
                         char** line_token = wildcard_expansion(line, &line_len);
 
-                        if(strstr(line, "|")){
-                            execute_pipe_command(line_token, &line_len);
-                        }
-                        else{
-                            execute_command(line_token, line_len);
-                        }
+                        execute_command(line_token, line_len);
                     }
                     line = (char*)realloc(line, 1);
                     line[0] = '\0';
@@ -638,12 +632,8 @@ int batch_mode(int numOfArgs, char** arguments){
 
                 if (e == 0){
                     char** line_token = wildcard_expansion(line, &line_len);
-                    if(strstr(line, "|")){
-                        execute_pipe_command(line_token, &line_len);
-                    }
-                    else{
-                        execute_command(line_token, line_len);
-                    }
+                    execute_command(line_token, line_len);
+
                 }
                 line = (char*)realloc(line, 1);
                 line[0] = '\0';
@@ -708,7 +698,6 @@ void interactive_mode(){
                 if (e == 0){
                     line_len--;
                     char** line_token = wildcard_expansion(line, &line_len); // converts line to a char array and if there is a * present expands the wildcard
-                    
                     execute_command(line_token, line_len);
                     
                 }    
