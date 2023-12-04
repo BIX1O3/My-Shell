@@ -9,7 +9,7 @@
 
 #### run 'make' to create mysh
 #### run './mysh' to run in interactive mode
-#### run './memgrind `file_name`' to run in batch mode
+#### run './memgrind `{file_name}`' to run in batch mode
 
 ## Design Choices:
 
