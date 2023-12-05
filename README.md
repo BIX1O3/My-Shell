@@ -16,7 +16,7 @@
 One of the design choices we made was to manually code the wildcard expansion instead of using glob,
 as we wanted a full understanding of how the code worked.
 We also integrated piping directly into the execute_command function, as only one pipe needed to be 
-dealth with at a time.
+dealt with at a time.
 
 ## Test Strategy and Test Cases:
 
