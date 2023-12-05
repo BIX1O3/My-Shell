@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -fsanitize=address,undefined -Wall
+CFLAGS = -g -Wall
 MYMALLOC_SRC = mysh.c
 SRCS = mysh.c
 TARGETS = mysh
