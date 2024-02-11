@@ -788,16 +788,13 @@ void interactive_mode(){
 }
 
 
-
-
-
-
-int main(int argc, char** argv){if (argc == 1){ // Interactive Mode call
+int main(int argc, char** argv){
+    if (argc == 1){ // Interactive Mode call
         interactive_mode();
     }
 
     if (argc > 1){ // Batch Mode call
-        batch_mode(argc, argv); // might be able to remove the first for loop in batch as the assignment may only run batch for one argument and not multiple
+        batch_mode(argc, argv);
     }
 
 
